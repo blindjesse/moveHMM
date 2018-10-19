@@ -126,7 +126,7 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
       leftDist  <- naPos - leftPos
       rightDist <- rightPos - naPos
 
-      covar[naPos] <- ifelse(leftDist <= rightDist, covar[leftPos], covar(rightPos))
+      covar[naPos] <- ifelse(leftDist <= rightDist, covar[leftPos], covar[rightPos])
       
       covar
     }
