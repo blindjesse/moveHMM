@@ -79,6 +79,11 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
             stop("Each animal's obervations must be contiguous.")
     }
 
+    eucDistance <- function(xyMatrix) {
+      xyD <- diff(xyMatrix)
+      sqrt(xyD[,1]^2 + xyD[,2]^2)
+    }
+
     for(zoo in 1:nbAnimals) {
         nbObs <- length(which(ID==unique(ID)[zoo])) # number of observations for animal zoo
         i1 <- which(ID==unique(ID)[zoo])[1] # index of 1st obs for animal zoo
@@ -88,7 +93,7 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
         if (type == 'LL') {
           step <- distGeo(pt_matrix)
         } else {
-          step <- distRhumb(pt_matrix)
+          step <- eucDistance(pt_matrix)
         }
         meters_per_km <- 1000
         step <- c(NA, step / meters_per_km)
@@ -96,11 +101,16 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
 
         if (LLangle) {
           bear <- bearing(pt_matrix)
+          angle <- c(NA, -diff(bear)/180*pi)
         } else {
-          bear <- bearingRhumb(pt_matrix)
+          diffMatrix <- diff(pt_matrix)
+          rawAngle <- diff(atan(diffMatrix[,2]/diffMatrix[,1]))
+          # Get angle between 0 and 2pi. The second bit factors out
+          # first and last angles are NA
+          angle <- c(NA, ifelse(rawAngle > 0, rawAngle %% 2*pi,
+                          ((rawAngle/(pi/2)) %% 4) * 2*pi), NA)
         }
 
-        angle <- c(NA, -diff(bear)/180*pi)
 
         # d = data for one individual
         d <- data.frame(ID=rep(unique(ID)[zoo],nbObs),
@@ -135,9 +145,11 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
     if(length(covsCol)>0) {
         covs <- data.frame(trackData[,covsCol]) # to prevent error if nbCovs==1
         colnames(covs) <- names(trackData)[covsCol]
-        for (col in covsCol) covs[[col]] <- fillMissing(covs[[col]])
-    }
-    else covs <- NULL
+        for (i in 1:length(covsCol)) { 
+          covs[,i] <- fillMissing(covs[,i])
+        }
+
+    } else covs <- NULL
 
     data <- cbind(data,x=x,y=y)
     if(!is.null(covs))
