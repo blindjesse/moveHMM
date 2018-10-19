@@ -27,7 +27,7 @@
 #' d <- prepData(trackData,type='UTM',coordNames=c("coord1","coord2"))
 #'
 #' @export
-#' @importFrom sp spDistsN1
+#' @importFrom geosphere distGeo distRhumb bearing bearingRhumb
 
 prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLangle=NULL)
 {
