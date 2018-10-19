@@ -49,9 +49,6 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
     if(is.null(LLangle))
         LLangle <- type=='LL' # TRUE if type=='LL', FALSE otherwise
 
-    data <- data.frame(ID=character(),
-                       step=numeric(),
-                       angle=numeric())
 
     # remove tracks with less than two observations
     for(zoo in unique(ID)) {
@@ -66,6 +63,13 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
     x <- trackData[,coordNames[1]]
     y <- trackData[,coordNames[2]]
 
+    # Pre-create data of the appropriate size to prevent slow rbinding
+    nbPoints <- length(ID)
+    data <- data.frame(ID=character(nbPoints),
+                       step=numeric(nbPoints),
+                       angle=numeric(nbPoints))
+    levels(data$ID) <- unique(ID)
+
     nbAnimals <- length(unique(ID))
 
     # check that each animal's observations are contiguous
@@ -77,37 +81,26 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
 
     for(zoo in 1:nbAnimals) {
         nbObs <- length(which(ID==unique(ID)[zoo])) # number of observations for animal zoo
-
-        step <- rep(NA,nbObs)
-        angle <- rep(NA,nbObs)
         i1 <- which(ID==unique(ID)[zoo])[1] # index of 1st obs for animal zoo
         i2 <- i1+nbObs-1 # index of last obs for animal zoo
+        
+        pt_matrix <- matrix(c(x[i1:i2], y[i1:i2]), ncol=2)
+        if (type == 'LL') {
+          step <- distGeo(pt_matrix)
+        } else {
+          step <- distRhumb(pt_matrix)
+        }
+        meters_per_km <- 1000
+        step <- c(NA, step / meters_per_km)
 
-        for(i in (i1+1):(i2-1)) {
-            # for each observation, compute step and angle
 
-            if(!is.na(x[i-1]) & !is.na(x[i]) & !is.na(y[i-1]) & !is.na(y[i])) {
-                # step length
-                step[i-i1] <- spDistsN1(pts = matrix(c(x[i-1],y[i-1]),ncol=2),
-                                        pt = c(x[i],y[i]),
-                                        longlat = (type=='LL')) # TRUE if 'LL', FALSE otherwise
-            }
-
-            if(!is.na(x[i-1]) & !is.na(x[i]) & !is.na(x[i+1]) & !is.na(y[i-1]) & !is.na(y[i]) & !is.na(y[i+1])) {
-                # turning angle
-                angle[i-i1+1] <- turnAngle(c(x[i-1],y[i-1]),
-                                           c(x[i],y[i]),
-                                           c(x[i+1],y[i+1]),
-                                           LLangle=LLangle)
-            }
+        if (LLangle) {
+          bear <- bearing(pt_matrix)
+        } else {
+          bear <- bearingRhumb(pt_matrix)
         }
 
-        # compute last step (last angle = NA)
-        if(!is.na(x[i2-1]) & !is.na(x[i2]) & !is.na(y[i2-1]) & !is.na(y[i2])) {
-            step[i2-i1] <- spDistsN1(pts = matrix(c(x[i2-1],y[i2-1]),ncol=2),
-                                     pt = c(x[i2],y[i2]),
-                                     longlat = (type=='LL')) # TRUE if 'LL', FALSE otherwise
-        }
+        angle <- c(NA, -diff(bear)/180*pi)
 
         # d = data for one individual
         d <- data.frame(ID=rep(unique(ID)[zoo],nbObs),
@@ -115,33 +108,34 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
                         angle=angle)
 
         # append individual data to output
-        data <- rbind(data,d)
+        data[i1:i2,] <- d
     }
 
+    # Vectorized NA filler
+    fillMissing <- function(covar) {
+      N <- length(covar)
+      naPos <- which(is.na(covar))
+      
+      # All NA or all non-NA
+      if (length(naPos) %in% c(0, N)) return(covar)
+
+      nonNaPos <- which(!is.na(dat))
+      intervals  <- findInterval(naPos, nonNaPos, all.inside = TRUE)
+      leftPos <- nonNaPos[pmax(1, intervals)]
+      rightPos <- nonNaPos[pmin(N, intervals+1)]
+      leftDist  <- naPos - leftPos
+      rightDist <- rightPos - naPos
+
+      covar[naPos] <- ifelse(leftDist <= rightDist, covar[leftPos], covar(rightPos))
+      
+      covar
+    }
     # identify covariate columns
     covsCol <- which(names(trackData)!="ID" & names(trackData)!=coordNames[1] & names(trackData)!=coordNames[2])
     if(length(covsCol)>0) {
         covs <- data.frame(trackData[,covsCol]) # to prevent error if nbCovs==1
         colnames(covs) <- names(trackData)[covsCol]
-
-        # account for missing values of the covariates
-        if(length(which(is.na(covs)))>0)
-            warning(paste("There are",length(which(is.na(covs))),
-                          "missing covariate values.",
-                          "Each will be replaced by the closest available value."))
-        for(i in 1:length(covsCol)) {
-            if(length(which(is.na(covs[,i])))>0) { # if covariate i has missing values
-                if(is.na(covs[1,i])) { # if the first value of the covariate is missing
-                    k <- 1
-                    while(is.na(covs[k,i])) k <- k+1
-                    for(j in k:2) covs[j-1,i] <- covs[j,i]
-                }
-                for(j in 2:nrow(trackData)) {
-                    if(is.na(covs[j,i]))
-                        covs[j,i] <- covs[j-1,i]
-                }
-            }
-        }
+        for (col in covsCol) covs[[col]] <- fillMissing(covs[[col]])
     }
     else covs <- NULL
 
