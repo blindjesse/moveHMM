@@ -119,7 +119,7 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
       # All NA or all non-NA
       if (length(naPos) %in% c(0, N)) return(covar)
 
-      nonNaPos <- which(!is.na(dat))
+      nonNaPos <- which(!is.na(covar))
       intervals  <- findInterval(naPos, nonNaPos, all.inside = TRUE)
       leftPos <- nonNaPos[pmax(1, intervals)]
       rightPos <- nonNaPos[pmin(N, intervals+1)]
