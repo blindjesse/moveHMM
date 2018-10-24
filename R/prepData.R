@@ -104,11 +104,13 @@ prepData <- function(trackData, type=c('LL','UTM'), coordNames=c("x","y"), LLang
           angle <- c(NA, -diff(bear)/180*pi)
         } else {
           diffMatrix <- diff(pt_matrix)
-          rawAngle <- diff(atan(diffMatrix[,2]/diffMatrix[,1]))
-          # Get angle between 0 and 2pi. The second bit factors out
-          # first and last angles are NA
-          angle <- c(NA, ifelse(rawAngle > 0, rawAngle %% 2*pi,
-                          ((rawAngle/(pi/2)) %% 4) * 2*pi), NA)
+          angle <- diff(atan(diffMatrix[,2]/diffMatrix[,1]))
+          nonNAangles <- angle[!is.na(angle)]
+          while(any(nonNAangles <= -pi) | any(nonNAangles > pi)) {
+            angle <- ifelse(angle <= -pi, angle + 2*pi,
+                       ifelse(angle > pi, angle - 2*pi, angle))
+          }
+          angle <- c(NA, angle, NA)
         }
 
 
